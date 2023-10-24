@@ -1,0 +1,265 @@
+#include "oledTask.h"
+
+#include "FreeRTOS.h"
+#include "task.h"
+
+#include "bsp_key.h"
+#include "bsp_oled.h"
+#include "oledfont.h"
+
+#include "stdio.h"
+#include "stdlib.h"
+
+#include "ds1302.h"
+
+#include "smath.h"
+
+
+
+
+//函数指针，指向要显示的内容的函数
+static void (*ui_page)(void);
+//获取到当前按下的按键值
+K_control key_value = 0;
+//整个任务操作这个数组，将内容刷新到UI,长度可以改变。
+char list[10][PAGE_MAX]= {0};
+
+
+static void Page_Refresh(void);
+static void OLED_PageShow(ui_coordinate_t *ui_coordinate, char (*list)[PAGE_MAX], uint8_t list_length);
+
+static void Home_Page(void);
+
+
+
+
+/**
+	* @name					  Ui_Oled_Init
+  * @brief          UI界面初始化函数
+  * @author         yangchen
+	* @param[in]	    void
+  * @retval         void
+	* @note           null
+  */
+void Ui_Oled_Init(void)
+{
+    ui_page = Home_Page;
+    key_value=K_MAX;
+}
+
+
+static const int faces[6][4] = {{0,1,2,3},{1,5,6,2},{5,4,7,6},{4,0,3,7},{0,4,5,1},{3,2,6,7}};
+static const int nvert = 8;
+static const int nfaces = 6;
+
+	
+
+//星空动画
+void ShowStars(void)
+{
+	    uint8_t  iAng = 0;
+  int Cnt, Cntv;
+	uint8_t vert[8][3];
+	uint8_t x1=0, x2=0, y1=0, y2=0; //,statu=0;
+	while(1)
+	{
+		
+		iAng+=2;
+		if(iAng == 180) iAng = 0;
+		
+		// Get vertices for the current angle
+				//获取当前角度的顶点
+	  		for(Cntv = 0; Cntv < nvert; ++Cntv)
+		    {
+	  				vert[Cntv][0] = vertices[iAng*nvert + Cntv][0];
+	  			 vert[Cntv][1] = vertices[iAng*nvert + Cntv][1];
+	  			  	vert[Cntv][2] = vertices[iAng*nvert + Cntv][2];
+	  		}
+	  		// Draw wireframe for each face of the cube
+				//为立方体的每个面绘制线框
+							//一个面有四条边，画六个面就是 4x6 =24次就可以完整显示
+	  		for(Cnt = 0;Cnt < nfaces; ++Cnt)
+				{
+
+	  			x1 = vert[faces[Cnt][0]][0]-34;
+	  			y1 = vert[faces[Cnt][0]][1]-1;
+	  			x2 = vert[faces[Cnt][1]][0]-34;
+	  			y2 = vert[faces[Cnt][1]][1]-1;
+          OLED_ShowLine(x1, y1, x2, y2,1);
+					
+	  			x1 = vert[faces[Cnt][1]][0]-34;
+	  			y1 = vert[faces[Cnt][1]][1]-1;
+	  			x2 = vert[faces[Cnt][2]][0]-34;
+	  			y2 = vert[faces[Cnt][2]][1]-1;
+					OLED_ShowLine(x1, y1, x2, y2,1);
+
+	  			x1 = vert[faces[Cnt][2]][0]-34;
+	  			y1 = vert[faces[Cnt][2]][1]-1;
+	  			x2 = vert[faces[Cnt][3]][0]-34;
+	  			y2 = vert[faces[Cnt][3]][1]-1;
+					OLED_ShowLine(x1, y1, x2, y2,1);
+
+
+	  			x1 = vert[faces[Cnt][3]][0]-34;
+	  			y1 = vert[faces[Cnt][3]][1]-1;
+	  			x2 = vert[faces[Cnt][0]][0]-34;
+	  			y2 = vert[faces[Cnt][0]][1]-1;
+					OLED_ShowLine(x1, y1, x2, y2,1);
+
+	  		}
+				
+		  OLED_Refresh_Gram();
+	    vTaskDelay(90);
+		  OLED_Clear();
+	}
+}
+
+
+
+/**
+	* @name					  ui_oled_task
+  * @brief          UI显示任务
+  * @author         ghyll
+  * @param[in]	    void *pvParameters :typeless pointer, can point to any type of data
+  * @retval         void 
+	* @note           null
+  */
+void oled_task(void *pvParameters)
+{
+	vTaskDelay(500);
+	OLED_Init();
+	Ui_Oled_Init();
+	ShowStars();
+	while(1)
+	{	
+		Ds1302ReadDecTime();
+		Page_Refresh();
+		vTaskDelay(500);
+	}
+}
+
+
+
+
+
+
+/**
+	* @name					  Home_Page
+  * @brief          主界面内容显示函数
+  * @author         yangchen
+	* @param[in]	    void
+  * @retval         void
+	* @note           null
+  */
+void Home_Page(void)
+{
+    static ui_coordinate_t home_coordinate= {0,0,0};
+    sprintf(list[0],"administrator   ");
+    sprintf(list[1],"Relay1          ");
+    sprintf(list[2],"Relay2          ");
+    sprintf(list[3],"Relay3          ");
+    sprintf(list[4],"%d %d %d     ",ds1302_time_info.hour,ds1302_time_info.minute,ds1302_time_info.second);
+    OLED_PageShow(&home_coordinate,list,5);
+    if(key_value==Key_Enter)
+    {
+        switch(home_coordinate.ui_y)
+        {
+        case 0:
+           
+            break;
+        case 1:
+            
+            break;
+        case 2:
+			
+            break;
+        case 3:
+		
+            break;
+        }
+    }
+    else if(key_value==Key_Esc)
+    {
+
+    }
+}
+
+
+
+
+/**
+	* @name					  Page_Refresh
+  * @brief          UI界面刷新函数
+  * @author         yangchen
+	* @param[in]	    void
+  * @retval         void
+	* @note           null
+  */
+u8 i=0;
+void Page_Refresh(void)
+{
+    static void (*page_late)(void);
+    if(page_late!=ui_page)
+    {
+        OLED_Fill(0,0,128,64,0);
+    }
+    page_late=ui_page;
+    key_value=getKey(K_TIME_SHORT, K_TIME_LONG);
+    ui_page();
+    OLED_Refresh_Gram();
+
+}
+
+/**
+	* @name					  OLED_PageShow
+  * @brief          UI界面显示函数
+  * @author         yangchen
+	* @param[in]	    ui_coordinate 当前页面的光标结构体信息
+	* @param[in]	    list          需要显示的列表数组
+	* @param[in]	    list_length   需要显示的列表数组的长度
+  * @retval         void
+	* @note           null
+  */
+void OLED_PageShow(ui_coordinate_t *ui_coordinate, char (*list)[PAGE_MAX], uint8_t list_length)
+{
+    unsigned char i;
+//---------------------------control coordinate------------------------
+    if(key_value == Key_Down)
+    {
+        ui_coordinate->ui_y++;
+    }
+    else if(key_value == Key_Up)
+    {
+        ui_coordinate->ui_y--;
+    }
+//---------------------------------------------------------------------
+    if(ui_coordinate->ui_y<0)
+    {
+        ui_coordinate->ui_y=list_length-1;
+    }
+    else if(ui_coordinate->ui_y>=list_length)
+    {
+        ui_coordinate->ui_y=0;
+    }
+//---------------------------------------------------------------------
+    for(i=0; i<5; i++)
+    {
+        if(ui_coordinate->ui_y/5*5+i>list_length-1)
+        {
+            OLED_ShowString(0,12*i,"                   ",12,1);
+        }
+        else
+        {
+            if(ui_coordinate->ui_y==ui_coordinate->ui_y/5*5+i)
+            {
+                OLED_ShowString(0,12*i,list[ui_coordinate->ui_y/5*5+i],12,0);
+            }
+            else
+            {
+                OLED_ShowString(0,12*i,list[ui_coordinate->ui_y/5*5+i],12,1);
+            }
+        }
+    }
+}
+
+

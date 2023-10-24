@@ -1,0 +1,24 @@
+#include "system_timer_task.h"
+#include "led.h"
+#include "bsp_key.h"
+#include "key.h"
+
+void TIM3_IRQHandler(void)
+{
+	if(TIM_GetITStatus(TIM3,TIM_IT_Update)==SET)
+	{
+	
+	//	LED0 = !LED0;
+		
+		key_IRQHandler();
+	}
+	TIM_ClearITPendingBit(TIM3,TIM_IT_Update);
+}
+
+
+
+
+
+
+
+
